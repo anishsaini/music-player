@@ -1,3 +1,5 @@
+// this is java script
+
 let progress = document.getElementById("progress");
 let song = document.getElementById("song");
 let ctRl = document.getElementById("ctRl");
