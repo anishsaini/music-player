@@ -3,6 +3,7 @@
 let progress = document.getElementById("progress");
 let song = document.getElementById("song");
 let ctRl = document.getElementById("ctRl");
+let playlist = document.getElementById("playlist");
 
 song.onloadedmetadata = function () {
   progress.max = song.duration;
