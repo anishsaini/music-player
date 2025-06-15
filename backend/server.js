@@ -41,11 +41,46 @@ app.get("/api/songs", (req, res) => {
 
     const songList = files
       .filter((file) => file.endsWith(".mp3"))
-      .map((file) => ({
-        title: path.parse(file).name,
-        artist: "Unknown Artist",
-        src: `http://localhost:${PORT}/songs/${file}`,
-      }));
+      .map((file) => {
+        let fileName = path.parse(file).name;
+        
+        // Remove SPOTDOWNLOADER.COM prefix if present
+        fileName = fileName.replace('[SPOTDOWNLOADER.COM] ', '');
+        
+        // Try to extract artist from filename
+        // Common patterns:
+        // 1. "Artist - Title"
+        // 2. "Title - Lofi" or "Title - Lofi Flip"
+        // 3. "Title (Lofi Mix)"
+        let artist = "Unknown Artist";
+        let title = fileName;
+
+        // Check for " - " pattern
+        if (fileName.includes(' - ')) {
+          const parts = fileName.split(' - ');
+          // If the last part contains "Lofi" or "Flip", it's probably a remix
+          if (parts[parts.length - 1].toLowerCase().includes('lofi') || 
+              parts[parts.length - 1].toLowerCase().includes('flip')) {
+            artist = "Lofi Artist";
+            title = parts.slice(0, -1).join(' - ');
+          } else {
+            artist = parts[0];
+            title = parts.slice(1).join(' - ');
+          }
+        }
+        
+        // Clean up the title
+        title = title.replace(/\(Lofi Mix\)/i, '')
+                    .replace(/\(Slowed & Reverb\)/i, '')
+                    .replace(/\(Slowed \+ Reverb\)/i, '')
+                    .trim();
+
+        return {
+          title: title,
+          artist: artist,
+          src: `http://localhost:${PORT}/songs/${file}`,
+        };
+      });
 
     console.log('Sending songs:', songList);
     res.json(songList);

@@ -30,7 +30,10 @@ function App() {
   const [volume, setVolume] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [queue, setQueue] = useState([]);
+  const [showQueue, setShowQueue] = useState(false);
   const audioRef = useRef(null);
+  const nextAudioRef = useRef(null);
 
   const cleanSongTitle = (title) => {
     return title.replace('[SPOTDOWNLOADER.COM] ', '');
@@ -39,6 +42,32 @@ function App() {
   useEffect(() => {
     fetchSongs();
   }, []);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.log("Playback failed:", error);
+          });
+        }
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  }, [isPlaying, currentSongIndex]);
+
+  // Preload next song
+  useEffect(() => {
+    if (songs.length > 0) {
+      const nextIndex = (currentSongIndex + 1) % songs.length;
+      if (nextAudioRef.current) {
+        nextAudioRef.current.src = songs[nextIndex]?.src;
+        nextAudioRef.current.load();
+      }
+    }
+  }, [currentSongIndex, songs]);
 
   const fetchSongs = async () => {
     try {
@@ -62,7 +91,12 @@ function App() {
     if (isPlaying) {
       audioRef.current.pause();
     } else {
-      audioRef.current.play();
+      const playPromise = audioRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.log("Playback failed:", error);
+        });
+      }
     }
     setIsPlaying(!isPlaying);
   };
@@ -91,19 +125,82 @@ function App() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const handleSongSelect = (index) => {
-    setCurrentSongIndex(index);
-    setIsPlaying(false);
-  };
-
   const handleNext = () => {
-    setCurrentSongIndex((prevIndex) => (prevIndex + 1) % songs.length);
-    setIsPlaying(false);
+    if (queue.length > 0) {
+      playNextInQueue();
+    } else {
+      const nextIndex = (currentSongIndex + 1) % songs.length;
+      setCurrentSongIndex(nextIndex);
+      setIsPlaying(true);
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.log("Playback failed:", error);
+          });
+        }
+      }
+    }
   };
 
   const handlePrevious = () => {
-    setCurrentSongIndex((prevIndex) => (prevIndex - 1 + songs.length) % songs.length);
-    setIsPlaying(false);
+    const prevIndex = (currentSongIndex - 1 + songs.length) % songs.length;
+    setCurrentSongIndex(prevIndex);
+    setIsPlaying(true);
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      const playPromise = audioRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.log("Playback failed:", error);
+        });
+      }
+    }
+  };
+
+  const handleSongSelect = (index) => {
+    setCurrentSongIndex(index);
+    setIsPlaying(true);
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      const playPromise = audioRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.log("Playback failed:", error);
+        });
+      }
+    }
+  };
+
+  const addToQueue = (songIndex) => {
+    if (!queue.includes(songIndex)) {
+      setQueue([...queue, songIndex]);
+    }
+  };
+
+  const removeFromQueue = (index) => {
+    setQueue(queue.filter((_, i) => i !== index));
+  };
+
+  const playNextInQueue = () => {
+    if (queue.length > 0) {
+      const nextSongIndex = queue[0];
+      setQueue(queue.slice(1));
+      setCurrentSongIndex(nextSongIndex);
+      setIsPlaying(true);
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.log("Playback failed:", error);
+          });
+        }
+      }
+    } else {
+      handleNext();
+    }
   };
 
   if (isLoading) {
@@ -125,7 +222,7 @@ function App() {
         <div className="player">
           <div className="cover-art">
             <div 
-              className="cover-image"
+              className={`cover-image ${isPlaying ? 'playing' : ''}`}
               style={{ backgroundColor: stringToColor(songs[currentSongIndex]?.title) }}
             >
               <div className="cover-initials">
@@ -139,10 +236,17 @@ function App() {
           </div>
           <div className="controls">
             <button onClick={handlePrevious}>⏮</button>
-            <button className="play-pause" onClick={handlePlayPause}>
+            <button className={`play-pause ${isPlaying ? 'playing' : ''}`} onClick={handlePlayPause}>
               {isPlaying ? '⏸' : '▶'}
             </button>
             <button onClick={handleNext}>⏭</button>
+            <button 
+              className={`queue-button ${showQueue ? 'active' : ''}`}
+              onClick={() => setShowQueue(!showQueue)}
+              title="Show Queue"
+            >
+              📋
+            </button>
           </div>
           <div className="progress-container">
             <input
@@ -180,17 +284,52 @@ function App() {
                 className={index === currentSongIndex ? 'active' : ''}
                 onClick={() => handleSongSelect(index)}
               >
-                {song.title}
+                <span>{song.title}</span>
+                <button 
+                  className="add-to-queue"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    addToQueue(index);
+                  }}
+                  title="Add to queue"
+                >
+                  ➕
+                </button>
               </li>
             ))}
           </ul>
         </div>
+        {showQueue && (
+          <div className="queue-container">
+            <h3>Queue</h3>
+            <ul>
+              {queue.map((songIndex, index) => (
+                <li key={index}>
+                  <span>{songs[songIndex]?.title}</span>
+                  <button 
+                    className="remove-from-queue"
+                    onClick={() => removeFromQueue(index)}
+                    title="Remove from queue"
+                  >
+                    ❌
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
       <audio
         ref={audioRef}
         src={songs[currentSongIndex]?.src}
         onTimeUpdate={handleTimeUpdate}
         onEnded={handleNext}
+        preload="auto"
+      />
+      <audio
+        ref={nextAudioRef}
+        preload="auto"
+        style={{ display: 'none' }}
       />
     </div>
   );
